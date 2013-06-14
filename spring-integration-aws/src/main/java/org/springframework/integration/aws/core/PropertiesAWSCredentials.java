@@ -108,14 +108,17 @@ public class PropertiesAWSCredentials extends BasicAWSCredentials implements Ini
 	 * Load the properties file and the keys
 	 */
 	public void afterPropertiesSet() throws Exception {
-		if (!StringUtils.hasText(propertyFileName))
+		if (!StringUtils.hasText(propertyFileName)) {
 			throw new InvalidAWSCredentialsException("Mandatory property propertyFileName expected");
+        }
 
-		if(!StringUtils.hasText(accessKeyProperty))
+		if(!StringUtils.hasText(accessKeyProperty)) {
 			throw new InvalidAWSCredentialsException("accessKeyValue has to be non empty and non null");
+        }
 
-		if(!StringUtils.hasText(secretKeyProperty))
+		if(!StringUtils.hasText(secretKeyProperty)) {
 			throw new InvalidAWSCredentialsException("secretKeyValue has to be non empty and non null");
+        }
 
 		loadProperties();
 
@@ -128,17 +131,20 @@ public class PropertiesAWSCredentials extends BasicAWSCredentials implements Ini
 		Resource resource;
 		if(propertyFileName.startsWith(ResourceUtils.CLASSPATH_URL_PREFIX)) {
 			resource = new ClassPathResource(propertyFileName.substring(ResourceUtils.CLASSPATH_URL_PREFIX.length()), ClassUtils.getDefaultClassLoader());
-		} else {
+		}
+        else {
 			resource = new ClassPathResource(propertyFileName, ClassUtils.getDefaultClassLoader());
 		}
-		if(!resource.exists())
+		if(!resource.exists()) {
 			throw new InvalidAWSCredentialsException("Unable to find resource \"" + propertyFileName + "\" in classpath");
+        }
 
 		Properties props = new Properties();
 		try {
 			props.load(resource.getInputStream());
 		} catch (IOException e) {
-			throw new InvalidAWSCredentialsException("Unable to load properties from  \"" + propertyFileName + "\" in classpath");
+			throw new InvalidAWSCredentialsException(
+                    "Unable to load properties from  \"" + propertyFileName + "\" in classpath", e);
 		}
 
 		setAccessKey((String)props.get(accessKeyProperty));

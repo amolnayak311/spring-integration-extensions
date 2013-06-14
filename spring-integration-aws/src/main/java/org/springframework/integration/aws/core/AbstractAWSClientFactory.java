@@ -49,22 +49,22 @@ public abstract class AbstractAWSClientFactory<T extends AmazonWebServiceClient>
 	/**
 	 * The String constant for HTTP
 	 */
-	protected final static String HTTP = "http://";
+	protected static final String HTTP = "http://";
 
 	/**
 	 * The String constant for HTTPS
 	 */
-	protected final static String HTTPS = "https://";
+	protected static final String HTTPS = "https://";
 
 	/**
 	 * The String constant for SMTP
 	 */
-	protected final String SMTP = "smtp://";
+	protected static final String SMTP = "smtp://";
 
 	/**
 	 * The default protocol to be used in case none is provided
 	 */
-	protected final static String DEFAULT_PROTOCOL = HTTPS;
+	protected static final String DEFAULT_PROTOCOL = HTTPS;
 
 	private T defaultEndpointInstance;
 
@@ -127,13 +127,17 @@ public abstract class AbstractAWSClientFactory<T extends AmazonWebServiceClient>
 			return null;
 		}
 		String endpoint;
+        String strUrl = null;
 		try {
 			if(!(stringUrl.startsWith(HTTP)
 					|| stringUrl.startsWith(HTTPS)
 					|| stringUrl.startsWith(SMTP))) {
-				stringUrl = DEFAULT_PROTOCOL + stringUrl;
+                strUrl = DEFAULT_PROTOCOL + stringUrl;
 			}
-			URL url = new URL(stringUrl);
+            else {
+                strUrl = stringUrl;
+            }
+			URL url = new URL(strUrl);
 			String host = url.getHost();
 			String protocol = url.getProtocol();
 			if(StringUtils.hasText(protocol)) {
@@ -143,7 +147,7 @@ public abstract class AbstractAWSClientFactory<T extends AmazonWebServiceClient>
 				endpoint = host;
 			}
 		} catch (MalformedURLException e) {
-			throw new AWSOperationException(null, "The URL \"" + stringUrl + "\" is malformed",e);
+			throw new AWSOperationException(null, "The URL \"" + strUrl + "\" is malformed",e);
 		}
 		return endpoint;
 	}

@@ -51,11 +51,14 @@ import org.springframework.util.StringUtils;
  */
 public class InboundFileSynchronizationImpl implements InboundFileSynchronizer,InitializingBean {
 
-	private final Log logger = LogFactory.getLog(getClass());
+    public static final int DEFAULT_ETAG_SIZE = 32;
+
+    private final Log logger = LogFactory.getLog(getClass());
 
 	public static final String CONTENT_MD5 = "Content-MD5";
 	private final AmazonS3Operations client;
-	private volatile int maxObjectsPerBatch = 100;		//default
+    private static final int DEFAULT_MAX_OBJECTS_PER_BATCH = 100;
+	private volatile int maxObjectsPerBatch = DEFAULT_MAX_OBJECTS_PER_BATCH;
 	private final InboundLocalFileOperations fileOperations;
 	private volatile FileNameFilter filter;
 	private volatile String fileWildcard;
@@ -88,7 +91,7 @@ public class InboundFileSynchronizationImpl implements InboundFileSynchronizer,I
 			filter = new RegexFileNameFilter(fileNameRegex);
 		}
 		else {
-			filter = new AlwaysTrueFileNamefilter();	//Match all
+			filter = new AlwaysTrueFileNamefilter();
 		}
 
 		if(acceptSubFolders) {
@@ -116,20 +119,25 @@ public class InboundFileSynchronizationImpl implements InboundFileSynchronizer,I
 			}
 			//Below sync can take long, above lock ensures only one thread is synchronizing
 			try {
+                String folder;
 				if(remoteFolder != null && "/".equals(remoteFolder)) {
-					remoteFolder = null;
+					folder = null;
 				}
+                else {
+                    folder = remoteFolder;
+                }
 
 				//Set the remote folder for the filter
 				if(filter instanceof AbstractFileNameFilter) {
-					((AbstractFileNameFilter)filter).setFolderName(remoteFolder);
+					((AbstractFileNameFilter)filter).setFolderName(folder);
 				}
 
 				String nextMarker = null;
 				do {
-					PaginatedObjectsView paginatedView = client.listObjects(bucketName, remoteFolder,nextMarker,maxObjectsPerBatch);
-					if(paginatedView == null)
-						break;	//No files to sync
+					PaginatedObjectsView paginatedView = client.listObjects(bucketName, folder,nextMarker,maxObjectsPerBatch);
+					if(paginatedView == null) {
+						break;
+                    }//No files to sync
 					nextMarker = paginatedView.getNextMarker();
 					List<S3ObjectSummary> summaries = paginatedView.getObjectSummary();
 					for(S3ObjectSummary summary:summaries) {
@@ -137,8 +145,9 @@ public class InboundFileSynchronizationImpl implements InboundFileSynchronizer,I
 						if(key.endsWith("/")) {
 							continue;
 						}
-						if(!filter.accept(key))
+						if(!filter.accept(key)) {
 							continue;
+                        }
 						//The folder is the root as the key is relative to bucket
 						AmazonS3Object s3Object = client.getObject(bucketName, "/", key);
 						synchronizeObjectWithFile(localDirectory,summary,s3Object);
@@ -160,19 +169,17 @@ public class InboundFileSynchronizationImpl implements InboundFileSynchronizer,I
 	private void synchronizeObjectWithFile(File localDirectory,S3ObjectSummary summary,
 			AmazonS3Object s3Object) {
 		//Get the complete object data
-
 		String key = summary.getKey();
 		if(key.endsWith("/")) {
 			return;
 		}
-		int lastIndex = key.lastIndexOf("/");
+		int lastIndex = key.lastIndexOf('/');
 
 		String fileName = key.substring(lastIndex + 1);
 		String filePath = localDirectory.getAbsolutePath();
 		if(!filePath.endsWith(File.separator)) {
 			filePath += File.separator;
 		}
-
 		File baseDirectory;
 		if(lastIndex > 0) {
 			//there could very well be previous '/' and thus nested sub folders
@@ -195,7 +202,7 @@ public class InboundFileSynchronizationImpl implements InboundFileSynchronizer,I
 		}
 
 		File file = new File(filePath + fileName);
-		if(!file.exists()) {
+        if(!file.exists()) {
 			//File doesnt exist, write the contents to it
 			try {
 				fileOperations.writeToFile(baseDirectory, fileName,s3Object.getInputStream());
@@ -213,66 +220,94 @@ public class InboundFileSynchronizationImpl implements InboundFileSynchronizer,I
 				return;
 			}
 			String eTag = summary.getETag();
-			String md5Hex = null;
 			if(isEtagMD5Hash(eTag)) {
-				//Single thread upload
-				try {
-					md5Hex = encodeHex(getContentsMD5AsBytes(file));
-				} catch (UnsupportedEncodingException e) {
-					logger.error("Exception encountered while generating the MD5 hash for the file " + file.getAbsolutePath(), e);
-				}
-				if(!eTag.equals(md5Hex)) {
-					//The local file is different than the one on S3, could be latest but we will still
-					//sync this with the copy on S3
-					try {
-						fileOperations.writeToFile(baseDirectory, fileName, s3Object.getInputStream());
-					} catch (IOException e) {
-						logger.error("Caught Exception while writing to file " + file.getAbsolutePath());
-					}
-				}
-			}
+                //Single thread upload
+                writeIfNeeded(s3Object, fileName, baseDirectory, file, eTag);
+            }
 			else {
 				//Multi part upload
-				//Get the MD5 hash from the headers
-				Map<String, String> userMetaData = s3Object.getUserMetaData();
-				String b64MD5 = userMetaData.get(CONTENT_MD5);
-				if(b64MD5 != null) {
-					//Need to convert to Hex from Base64
-					try {
-						md5Hex = encodeHex(getContentsMD5AsBytes(file));
-					} catch (UnsupportedEncodingException e) {
-						logger.error("Exception encountered while generating the MD5 hash for the file " + file.getAbsolutePath(), e);
-					}
-					try {
-						String remoteHexMD5 = new String(
-								encodeHex(
-										decodeBase64(b64MD5.getBytes("UTF-8"))));
-						if(!md5Hex.equals(remoteHexMD5)) {
-							//Update only if the local file is not same as remote file
-							try {
-								fileOperations.writeToFile(baseDirectory, fileName, s3Object.getInputStream());
-							} catch (IOException e) {
-								logger.error("Caught Exception while writing to file " + file.getAbsolutePath());
-							}
-						}
-
-					} catch (UnsupportedEncodingException e) {
-						//Should never get this, suppress
-					}
-				}
-				else {
-					//Forcefully update the file
-					try {
-						fileOperations.writeToFile(baseDirectory, fileName, s3Object.getInputStream());
-					} catch (IOException e) {
-						logger.error("Caught Exception while writing to file " + file.getAbsolutePath());
-					}
-				}
+                writeMultiPartFileIfNeeded(s3Object, fileName, baseDirectory, file);
 			}
 		}
 	}
 
-	/**
+    /**
+     *
+     * @param s3Object
+     * @param fileName
+     * @param baseDirectory
+     * @param file
+     */
+    private void writeMultiPartFileIfNeeded(AmazonS3Object s3Object, String fileName, File baseDirectory,
+                                            File file) {
+        final String exceptionPrefix = "Caught Exception while writing to file ";
+        Map<String, String> userMetaData = s3Object.getUserMetaData();
+        String b64MD5 = userMetaData.get(CONTENT_MD5);
+        String md5Hex = null;
+        if(b64MD5 != null) {
+            //Need to convert to Hex from Base64
+            try {
+                md5Hex = encodeHex(getContentsMD5AsBytes(file));
+            } catch (UnsupportedEncodingException e) {
+                logger.error("Exception encountered while generating the MD5 hash for the file " + file.getAbsolutePath(), e);
+            }
+            try {
+                String remoteHexMD5 = new String(
+                        encodeHex(
+                                decodeBase64(b64MD5.getBytes("UTF-8"))));
+                if(!remoteHexMD5.equals(md5Hex)) {
+                    //Update only if the local file is not same as remote file
+                    try {
+                        fileOperations.writeToFile(baseDirectory, fileName, s3Object.getInputStream());
+                    } catch (IOException e) {
+                        logger.error(exceptionPrefix + file.getAbsolutePath());
+                    }
+                }
+
+            } catch (UnsupportedEncodingException e) {
+                //Should never get this, suppress
+            }
+        }
+        else {
+            //Forcefully update the file
+            try {
+                fileOperations.writeToFile(baseDirectory, fileName, s3Object.getInputStream());
+            } catch (IOException e) {
+                logger.error(exceptionPrefix + file.getAbsolutePath());
+            }
+        }
+    }
+
+    /**
+     *  The method writes to the file if it detects change in contents of the local file with respect
+     *  to the file in the bucket
+     *
+     * @param s3Object
+     * @param fileName
+     * @param baseDirectory
+     * @param file
+     * @param eTag
+     */
+    private void writeIfNeeded(AmazonS3Object s3Object, String fileName, File baseDirectory,
+                               File file, String eTag) {
+        String md5Hex = null;
+        try {
+            md5Hex = encodeHex(getContentsMD5AsBytes(file));
+        } catch (UnsupportedEncodingException e) {
+            logger.error("Exception encountered while generating the MD5 hash for the file " + file.getAbsolutePath(), e);
+        }
+        if(!eTag.equals(md5Hex)) {
+            //The local file is different than the one on S3, could be latest but we will still
+            //sync this with the copy on S3
+            try {
+                fileOperations.writeToFile(baseDirectory, fileName, s3Object.getInputStream());
+            } catch (IOException e) {
+                logger.error("Caught Exception while writing to file " + file.getAbsolutePath());
+            }
+        }
+    }
+
+    /**
 	 * Checks if the given eTag is a MD5 hash as hex, the hash is 128 bit and hence
 	 * has to be 32 characters in length, also it should contain only hex characters
 	 * In case of multi uploads, it is observed that the eTag contains a "-",
@@ -281,7 +316,7 @@ public class InboundFileSynchronizationImpl implements InboundFileSynchronizer,I
 	 * @param eTag
 	 */
 	private boolean isEtagMD5Hash(String eTag) {
-		if (eTag == null || eTag.length() != 32) {
+		if (eTag == null || eTag.length() != DEFAULT_ETAG_SIZE) {
 			return false;
 		}
 		return eTag.replaceAll("[a-f0-9A-F]", "").length() == 0;
@@ -293,8 +328,9 @@ public class InboundFileSynchronizationImpl implements InboundFileSynchronizer,I
 	 */
 
 	public void setSynchronizingBatchSize(int batchSize) {
-		if(batchSize > 0)
+		if(batchSize > 0) {
 			this.maxObjectsPerBatch = batchSize;
+        }
 	}
 
 	/* (non-Javadoc)

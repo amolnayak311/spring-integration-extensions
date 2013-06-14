@@ -18,7 +18,6 @@ package org.springframework.integration.aws.config.xml;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionReaderUtils;
 import org.springframework.beans.factory.xml.ParserContext;
-import org.springframework.integration.aws.core.AWSCredentials;
 import org.springframework.integration.aws.core.BasicAWSCredentials;
 import org.springframework.integration.aws.core.PropertiesAWSCredentials;
 import org.springframework.util.StringUtils;
@@ -45,8 +44,8 @@ public final class AmazonWSParserUtils {
 
 
 	/**
-	 * Registers the {@link AWSCredentials} bean with the current ApplicationContext if
-	 * accessKey and secretKey is given, if the credentials-ref is given, the given value
+	 * Registers the {@link org.springframework.integration.aws.core.AWSCredentials} bean with the current
+     * ApplicationContext if accessKey and secretKey is given, if the credentials-ref is given, the given value
 	 * is returned.
 	 *
 	 * @param element

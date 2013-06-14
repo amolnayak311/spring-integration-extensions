@@ -25,7 +25,6 @@ import javax.mail.internet.MimeMessage;
 
 import org.springframework.integration.aws.core.AWSCredentials;
 import org.springframework.integration.aws.core.AWSOperationException;
-import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
@@ -75,12 +74,12 @@ public class DefaultAmazonSESMailSender implements JavaMailSender {
 	};
 
 	@Override
-	public void send(SimpleMailMessage simpleMessage) throws MailException {
+	public void send(SimpleMailMessage simpleMessage) {
 		javaMailSender.send(simpleMessage);
 	}
 
 	@Override
-	public void send(SimpleMailMessage[] simpleMessages) throws MailException {
+	public void send(SimpleMailMessage[] simpleMessages) {
 		javaMailSender.send(simpleMessages);
 	}
 
@@ -90,32 +89,27 @@ public class DefaultAmazonSESMailSender implements JavaMailSender {
 	}
 
 	@Override
-	public MimeMessage createMimeMessage(InputStream contentStream)
-			throws MailException {
+	public MimeMessage createMimeMessage(InputStream contentStream) {
 		return javaMailSender.createMimeMessage(contentStream);
 	}
 
 	@Override
-	public void send(MimeMessage mimeMessage) throws MailException {
+	public void send(MimeMessage mimeMessage) {
 		javaMailSender.send(mimeMessage);
 	}
 
 	@Override
-	public void send(MimeMessage[] mimeMessages) throws MailException {
+	public void send(MimeMessage[] mimeMessages) {
 		javaMailSender.send(mimeMessages);
 	}
 
 	@Override
-	public void send(MimeMessagePreparator mimeMessagePreparator)
-			throws MailException {
+	public void send(MimeMessagePreparator mimeMessagePreparator) {
 		javaMailSender.send(mimeMessagePreparator);
-
 	}
 
 	@Override
-	public void send(MimeMessagePreparator[] mimeMessagePreparators)
-			throws MailException {
+	public void send(MimeMessagePreparator[] mimeMessagePreparators) {
 		javaMailSender.send(mimeMessagePreparators);
 	}
-
 }

@@ -61,10 +61,8 @@ public class AmazonS3InboundSynchronizationMessageSource extends
 	private volatile boolean acceptSubFolders;
 	private volatile String awsEndpoint;
 	//We will hard code the queue capacity here
-	private final int QUEUE_CAPACITY = 1024;
-	private volatile StandardEvaluationContext ctx;
+	private static final int QUEUE_CAPACITY = 1024;
 	private volatile Expression directoryExpression;
-
 
 	public Message<File> receive() {
 		File headElement = filesQueue.poll();
@@ -86,7 +84,7 @@ public class AmazonS3InboundSynchronizationMessageSource extends
 	protected void onInit() throws Exception {
 		Assert.notNull(directoryExpression, "Local directory to synchronize to is not set");
 
-		ctx = new StandardEvaluationContext();
+        StandardEvaluationContext ctx = new StandardEvaluationContext();
 		BeanFactory factory = getBeanFactory();
 		if(factory != null) {
 			ctx.setBeanResolver(new BeanFactoryResolver(factory));
@@ -95,9 +93,6 @@ public class AmazonS3InboundSynchronizationMessageSource extends
 		directory = new File(directoryPath);
 
 		Assert.notNull(directory, "Please provide a valid local directory to synchronize the remote files");
-//		TODO: Uncomment this once we start supporting auto-create-local-directory
-//		Assert.isTrue(directory.exists(),
-//				String.format("Provided directory %s does not exist", directoryPath));
 		Assert.isTrue(directory.isDirectory(),
 				String.format("Provided path %s is not a directory", directoryPath));
 

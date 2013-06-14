@@ -41,7 +41,8 @@ import org.springframework.util.StringUtils;
  */
 public class AmazonS3ObjectBuilder {
 
-	private final Log logger = LogFactory.getLog(getClass());
+    public static final int VALID_CANONICAL_ID_LENGTH = 64;
+    private final Log logger = LogFactory.getLog(getClass());
 
 	private File file;
 	private InputStream in;
@@ -175,11 +176,9 @@ public class AmazonS3ObjectBuilder {
 	 */
 	private boolean isCanonicalId(String identifier) {
 		//Note: we do not check if the given id is a valid canonical id with AWS, we just check if it is in the right format
-		if(StringUtils.hasText(identifier)) {
-			if(identifier.length() == 64) {
-				String replacedString = identifier.trim().replaceAll("[a-fA-F0-9]+","");
-				return replacedString.length() == 0;
-			}
+		if(StringUtils.hasText(identifier) && identifier.length() == VALID_CANONICAL_ID_LENGTH) {
+            String replacedString = identifier.trim().replaceAll("[a-fA-F0-9]+","");
+            return replacedString.length() == 0;
 		}
 		return false;
 	}

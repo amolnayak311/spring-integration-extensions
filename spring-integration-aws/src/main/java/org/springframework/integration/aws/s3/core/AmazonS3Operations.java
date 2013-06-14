@@ -26,7 +26,7 @@ package org.springframework.integration.aws.s3.core;
  */
 public interface AmazonS3Operations {
 
-	public static final String CONTENT_MD5_HEADER = "Content-MD5";
+	String CONTENT_MD5_HEADER = "Content-MD5";
 
 	/**
 	 * Lists Objects in the given bucket and given folder. Provide / if you

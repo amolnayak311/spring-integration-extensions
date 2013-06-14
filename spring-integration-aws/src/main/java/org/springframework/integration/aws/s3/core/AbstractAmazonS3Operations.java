@@ -48,7 +48,10 @@ import org.springframework.util.Assert;
  */
 public abstract class AbstractAmazonS3Operations implements AmazonS3Operations,InitializingBean {
 
-	protected final Log logger = LogFactory.getLog(getClass());
+    public static final int MULTIPART_THRESHOLD_BASE = 5120;
+    public static final int ARRAY_SIZE = 1024;
+
+    protected final Log logger = LogFactory.getLog(getClass());
 
 	private volatile long multipartUploadThreshold;
 
@@ -56,7 +59,7 @@ public abstract class AbstractAmazonS3Operations implements AmazonS3Operations,I
 
 	private volatile String temporaryFileSuffix = ".writing";
 
-	public final String PATH_SEPARATOR = "/";
+	public static final String PATH_SEPARATOR = "/";
 
 	private final AWSCredentials credentials;
 
@@ -94,8 +97,8 @@ public abstract class AbstractAmazonS3Operations implements AmazonS3Operations,I
 	 * @param multipartUploadThreshold
 	 */
 	public void setMultipartUploadThreshold(long multipartUploadThreshold) {
-		Assert.isTrue(multipartUploadThreshold >= 5120,
-				"Minimum threshold for multipart upload is 5120 bytes");
+		Assert.isTrue(multipartUploadThreshold >= MULTIPART_THRESHOLD_BASE,
+				"Minimum threshold for multipart upload is " + MULTIPART_THRESHOLD_BASE + " bytes");
 		this.multipartUploadThreshold = multipartUploadThreshold;
 	}
 
@@ -144,11 +147,14 @@ public abstract class AbstractAmazonS3Operations implements AmazonS3Operations,I
 	 */
 	public void setTemporaryFileSuffix(String temporaryFileSuffix) {
 		Assert.hasText(temporaryFileSuffix, "The temporary file suffix must not be null or empty");
+        String suffix;
 		if(!temporaryFileSuffix.startsWith(".")) {
-			temporaryFileSuffix = "." + temporaryFileSuffix;
+			suffix = "." + temporaryFileSuffix;
 		}
-
-		this.temporaryFileSuffix = temporaryFileSuffix;
+        else {
+            suffix = temporaryFileSuffix;
+        }
+		this.temporaryFileSuffix = suffix;
 	}
 
 	/**
@@ -210,10 +216,10 @@ public abstract class AbstractAmazonS3Operations implements AmazonS3Operations,I
 		else {
 			fileName = objectName;
 		}
-		File temporaryDirectory = getTemporaryDirectory();
-		String temporaryFileSuffix = getTemporaryFileSuffix();
+		File tempDirectory = getTemporaryDirectory();
+		String tempFileSuffix = getTemporaryFileSuffix();
 
-		String filePath = temporaryDirectory.getAbsoluteFile() + File.separator + fileName + temporaryFileSuffix;
+		String filePath = tempDirectory.getAbsoluteFile() + File.separator + fileName + tempFileSuffix;
 
 		if(logger.isDebugEnabled()) {
 			logger.debug("Temporary file path is " + filePath);
@@ -224,7 +230,7 @@ public abstract class AbstractAmazonS3Operations implements AmazonS3Operations,I
 		FileOutputStream fos = null;
 		try {
 			fos = new FileOutputStream(tempFile);
-			byte[] bytes = new byte[1024];
+			byte[] bytes = new byte[ARRAY_SIZE];
 			int read = 0;
 			while(true) {
 				read = inStream.read(bytes);
@@ -344,17 +350,22 @@ public abstract class AbstractAmazonS3Operations implements AmazonS3Operations,I
 	 * @param objectName
 	 */
 	private String getKeyFromFolder(String folder, String objectName) {
+        String objName;
 		if(objectName.startsWith(PATH_SEPARATOR)) {
 			//remove the leading / of the object name
-			objectName = objectName.substring(1);
+			objName = objectName.substring(1);
 		}
+        else {
+            objName = objectName;
+        }
+
 		String key;
 		if(folder != null) {
 			key = folder.endsWith(PATH_SEPARATOR)?
-					folder + objectName:folder + PATH_SEPARATOR + objectName;
+					folder + objName:folder + PATH_SEPARATOR + objName;
 		}
 		else {
-			key = objectName;
+			key = objName;
 		}
 
 		//check if the foldername begins with a /, if yes, remove it as well as it created

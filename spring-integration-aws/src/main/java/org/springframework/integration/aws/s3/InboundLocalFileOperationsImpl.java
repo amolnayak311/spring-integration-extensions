@@ -42,7 +42,8 @@ import org.springframework.util.StringUtils;
 public class InboundLocalFileOperationsImpl implements
 		InboundLocalFileOperations {
 
-	private final Log logger = LogFactory.getLog(getClass());
+    public static final int BYTE_ARRAY_SIZE = 4096;
+    private final Log logger = LogFactory.getLog(getClass());
 
 	private final List<FileEventHandler> handlers = new ArrayList<FileEventHandler>();
 
@@ -109,26 +110,20 @@ public class InboundLocalFileOperationsImpl implements
 	/* (non-Javadoc)
 	 * @see org.springframework.integration.aws.s3.InboundLocalFileOperations#writeToFile(java.io.File, java.lang.String, java.io.InputStream)
 	 */
-	public void writeToFile(File directory, String fileName, InputStream in)
+	public void writeToFile(File directory, String fileName, InputStream inputStream)
 		throws IOException {
-		Assert.notNull(directory, "Provide a non null directory");
-		Assert.hasText(fileName, "Provide a non null non empty file name");
-		Assert.notNull(in,"Provide a non null instance of InputStream");
-		Assert.isTrue(!directory.exists() || directory.isDirectory(),"Provided directory is not a directory");
-		Assert.isTrue(createDirectoriesIfRequired || directory.exists(),"Provided directories does not exist and create directory flag is false");
+        assertInputParameters(directory, fileName, inputStream);
 
-		if(!directory.exists() && createDirectoriesIfRequired) {
-			if(!directory.mkdirs()) {
-				throw new IOException(String.format("Unable to create the directory '%s'", directory.getAbsolutePath()));
-			}
+        InputStream in;
+		if(!(inputStream instanceof ByteArrayInputStream)
+				&& !(inputStream instanceof BufferedInputStream)) {
+			in = new BufferedInputStream(inputStream);
 		}
-
-		if(!(in instanceof ByteArrayInputStream)
-				&& !(in instanceof BufferedInputStream)) {
-			in = new BufferedInputStream(in);
-		}
+        else {
+            in = inputStream;
+        }
 		String tempFileName = fileName + tempFileSuffix;
-		byte[] bytes = new byte[4096];	//4K
+		byte[] bytes = new byte[BYTE_ARRAY_SIZE];
 
 		String absoluteDirectoryPath = directory.getAbsolutePath();
 		String filePath;
@@ -145,75 +140,110 @@ public class InboundLocalFileOperationsImpl implements
 		}
 		FileOutputStream fos = new FileOutputStream(fileToWrite);
 		BufferedOutputStream bos = new BufferedOutputStream(fos);
-		for(int read = 0;(read = in.read(bytes)) != -1;) {
+        int read = in.read(bytes);
+		while(read!= -1) {
 			bos.write(bytes, 0, read);
+            read = in.read(bytes);
 		}
 		bos.close();
 		//Now rename the file
 		final File dest = new File(filePath.substring(0, filePath.indexOf(tempFileSuffix)));
 		//ifDestination file exists, delete it
-		final boolean isSuccessful;
-		if(dest.exists()) {
-			boolean isDeleteSuccessful = dest.delete();
-			if(isDeleteSuccessful) {
-				if(logger.isDebugEnabled()) {
-					logger.debug("Delete of file " + dest.getName() + " successful");
-				}
-				//now rename the temp file to perm destination file
-				isSuccessful = renameFile(fileToWrite, dest);
-			}
-			else {
-				if(logger.isWarnEnabled()) {
-					logger.warn("Deletion of file " + dest.getName() + " not successful, falling back to overwriting the contents");
-				}
-				FileCopyUtils.copy(fileToWrite, dest);
-				boolean deleteTemp = fileToWrite.delete();
-				if(!deleteTemp && logger.isWarnEnabled()) {
-					logger.warn("Deletion of " + fileToWrite.getName() + " unsuccessful");
-				}
-				isSuccessful = true;	//as copy has occurred successfully
-
-			}
-		}
-		else {
-			isSuccessful = renameFile(fileToWrite, dest);
-		}
+        final boolean isSuccessful = renameOrCopyToDestination(fileToWrite, dest);
 		//notify the listeners
 		if(!handlers.isEmpty()) {
-			FileEvent event = new FileEvent() {
-
-
-				public FileOperationType getFileOperation() {
-					return FileOperationType.CREATE;
-				}
-
-
-				public File getFile() {
-					if(isSuccessful) {
-						return dest;
-					}
-					else {
-						return fileToWrite;
-					}
-				}
-			};
-			for(FileEventHandler handler:handlers) {
-				try {
-					handler.onEvent(event);
-				} catch (Exception e) {
-					if(logger.isInfoEnabled())
-						logger.info("Exception occurred while notifying the handler class "
-								+ handler.getClass().getName(), e);
-				}
-			}
+            notifyListeners(fileToWrite, dest, isSuccessful);
 		}
 	}
 
-	/**
+    /**
+     *  Notifies the registered listeners about the file writing event
+     * @param fileToWrite
+     * @param dest
+     * @param successful
+     */
+    private void notifyListeners(final File fileToWrite, final File dest, final boolean successful) {
+        FileEvent event = new FileEvent() {
+
+            public FileOperationType getFileOperation() {
+                return FileOperationType.CREATE;
+            }
+
+            public File getFile() {
+                if(successful) {
+                    return dest;
+                }
+                else {
+                    return fileToWrite;
+                }
+            }
+        };
+        for(FileEventHandler handler:handlers) {
+            try {
+                handler.onEvent(event);
+            } catch (Exception e) {
+                if(logger.isInfoEnabled()) {
+                    logger.info("Exception occurred while notifying the handler class "
+                            + handler.getClass().getName(), e);
+                }
+            }
+        }
+    }
+
+    /**
+     *
+     * @param fileToWrite
+     * @param dest
+     * @return
+     * @throws IOException
+     */
+    private boolean renameOrCopyToDestination(File fileToWrite, File dest) throws IOException {
+        final boolean isSuccessful;
+        if(dest.exists()) {
+            boolean isDeleteSuccessful = dest.delete();
+            if(isDeleteSuccessful) {
+                if(logger.isDebugEnabled()) {
+                    logger.debug("Delete of file " + dest.getName() + " successful");
+                }
+                //now rename the temp file to perm destination file
+                isSuccessful = renameFile(fileToWrite, dest);
+            }
+            else {
+                if(logger.isWarnEnabled()) {
+                    logger.warn("Deletion of file " + dest.getName() + " not successful, falling back to overwriting the contents");
+                }
+                FileCopyUtils.copy(fileToWrite, dest);
+                boolean deleteTemp = fileToWrite.delete();
+                if(!deleteTemp && logger.isWarnEnabled()) {
+                    logger.warn("Deletion of " + fileToWrite.getName() + " unsuccessful");
+                }
+                isSuccessful = true;
+
+            }
+        }
+        else {
+            isSuccessful = renameFile(fileToWrite, dest);
+        }
+        return isSuccessful;
+    }
+
+    private void assertInputParameters(File directory, String fileName, InputStream in) throws IOException {
+        Assert.notNull(directory, "Provide a non null directory");
+        Assert.hasText(fileName, "Provide a non null non empty file name");
+        Assert.notNull(in,"Provide a non null instance of InputStream");
+        Assert.isTrue(!directory.exists() || directory.isDirectory(),"Provided directory is not a directory");
+        Assert.isTrue(createDirectoriesIfRequired || directory.exists(),"Provided directories does not exist and create directory flag is false");
+
+        if(!directory.exists() && createDirectoriesIfRequired && !directory.mkdirs()) {
+            throw new IOException(String.format("Unable to create the directory '%s'", directory.getAbsolutePath()));
+        }
+    }
+
+    /**
 	 * Private helper method that is used to rename the source to destination file
 	 *
-	 * @param fileToWrite
-	 * @param dest
+	 * @param from
+	 * @param to
 	 */
 	private boolean renameFile(final File from, final File to) {
 		final boolean isSuccessful;

@@ -25,10 +25,9 @@ package org.springframework.integration.aws.s3;
  *
  */
 public interface AmazonS3MessageHeaders {
-
 	//TODO: Get rid of the interface for constants
-	public static final String FILE_NAME 			= "file_name";
-	public static final String USER_METADATA		= "user_meta_data";
-	public static final String METADATA				= "meta_data";
-	public static final String OBJECT_ACLS			= "object_acls";
+	String FILE_NAME 			= "file_name";
+	String USER_METADATA		= "user_meta_data";
+	String METADATA				= "meta_data";
+	String OBJECT_ACLS			= "object_acls";
 }

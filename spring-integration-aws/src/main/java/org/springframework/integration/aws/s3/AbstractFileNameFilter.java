@@ -41,14 +41,15 @@ public abstract class AbstractFileNameFilter implements FileNameFilter {
 	 * @see org.springframework.integration.aws.s3.FileNameFilter#accept(java.lang.String)
 	 */
 	public boolean accept(String fileName) {
-		if(!StringUtils.hasText(fileName))
-			return false;
+		if(!StringUtils.hasText(fileName)) {
+            return false;
+        }
 
 		if(StringUtils.hasText(folderName)) {
 			if(fileName.startsWith(folderName)) {
 				//This file is in the folder or in a child folder or the given folder
 				String relativePath = fileName.substring(folderName.length());
-				if(relativePath.length() == 0 || (!acceptSubFolders && relativePath.indexOf("/") != -1)) {
+				if(relativePath.length() == 0 || (!acceptSubFolders && relativePath.indexOf('/') != -1)) {
 					return false;
 				}
 			}
@@ -58,12 +59,12 @@ public abstract class AbstractFileNameFilter implements FileNameFilter {
 		}
 		else {
 			//Its the folder entry within the bucket
-			if(!acceptSubFolders && fileName.indexOf("/") != -1) {
+			if(!acceptSubFolders && fileName.indexOf('/') != -1) {
 				return false;
 			}
 		}
 		if(fileName.contains("/")) {
-			return isFileNameAccepted(fileName.substring(fileName.lastIndexOf("/") + 1));
+			return isFileNameAccepted(fileName.substring(fileName.lastIndexOf('/') + 1));
 		}
 		else {
 			return isFileNameAccepted(fileName);

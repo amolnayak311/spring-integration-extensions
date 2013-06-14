@@ -104,7 +104,7 @@ public class AmazonS3OutboundChannelAdapterParser extends
 		//Set the bucket and charset
 		builder.addConstructorArgReference(operationsService);
 		IntegrationNamespaceUtils.setValueIfAttributeDefined(builder, element, CHARSET);
-		builder.addPropertyValue(S3_BUCKET, element.getAttribute(S3_BUCKET));		//Mandatory
+		builder.addPropertyValue(S3_BUCKET, element.getAttribute(S3_BUCKET));
 
 		//Get the remote directory expression or remote directory literal string
 		String remoteDirectoryLiteral = element.getAttribute(REMOTE_DIRECTORY);

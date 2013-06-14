@@ -60,7 +60,7 @@ public class DefaultAmazonS3Operations extends AbstractAmazonS3Operations {
 
 	private AmazonS3Client client;
 
-	private volatile TransferManager transferManager;	//Used to upload to S3
+	private volatile TransferManager transferManager;
 
 	private volatile ThreadPoolExecutor threadPoolExecutor;
 
@@ -78,8 +78,8 @@ public class DefaultAmazonS3Operations extends AbstractAmazonS3Operations {
 			protected AmazonS3Client getClientImplementation() {
 				String accessKey = credentials.getAccessKey();
 				String secretKey = credentials.getSecretKey();
-				BasicAWSCredentials credentials = new BasicAWSCredentials(accessKey, secretKey);
-				return new AmazonS3Client(credentials);
+				BasicAWSCredentials basicAWSCredentials = new BasicAWSCredentials(accessKey, secretKey);
+				return new AmazonS3Client(basicAWSCredentials);
 			}
 
 		};
@@ -104,7 +104,7 @@ public class DefaultAmazonS3Operations extends AbstractAmazonS3Operations {
 		if(multipartUploadThreshold > 0) {
 			TransferManagerConfiguration config = new TransferManagerConfiguration();
 			if(multipartUploadThreshold > Integer.MAX_VALUE) {
-				config.setMultipartUploadThreshold(Integer.MAX_VALUE);		//2GB
+				config.setMultipartUploadThreshold(Integer.MAX_VALUE);
 			}
 			else {
 				config.setMultipartUploadThreshold((int)multipartUploadThreshold);
@@ -149,22 +149,19 @@ public class DefaultAmazonS3Operations extends AbstractAmazonS3Operations {
 					public long getSize() {
 						return summary.getSize();
 					}
-
 					public Date getLastModified() {
 						return summary.getLastModified();
 					}
-
 					public String getKey() {
 						return summary.getKey();
 					}
-
 					public String getETag() {
 						return summary.getETag();
 					}
-
 					public String getBucketName() {
 						return summary.getBucketName();
 					}
+
 				};
 				objectSummaries.add(summ);
 			}
@@ -290,39 +287,37 @@ public class DefaultAmazonS3Operations extends AbstractAmazonS3Operations {
 	 */
 	private AccessControlList getAccessControlList(String bucketName,String key,AmazonS3ObjectACL acl) {
 		AccessControlList accessControlList = null;
-		if(acl != null) {
-			if(!acl.getGrants().isEmpty()) {
-				accessControlList = client.getObjectAcl(bucketName, key);
-				for(ObjectGrant objGrant:acl.getGrants()) {
-					Grantee grantee = objGrant.getGrantee();
-					com.amazonaws.services.s3.model.Grantee awsGrantee;
-					if(grantee.getGranteeType() == GranteeType.CANONICAL_GRANTEE_TYPE) {
-						awsGrantee = new CanonicalGrantee(grantee.getIdentifier());
-					}
-					else if(grantee.getGranteeType() == GranteeType.EMAIL_GRANTEE_TYPE) {
-						awsGrantee = new EmailAddressGrantee(grantee.getIdentifier());
-					}
-					else {
-						awsGrantee = GroupGrantee.parseGroupGrantee(grantee.getIdentifier());
-						if(awsGrantee == null) {
-							logger.warn("Group grantee with identifier: \"" + grantee.getIdentifier() + "\" not found. skipping this grant");
-							continue;
-						}
-					}
-					ObjectPermissions perm = objGrant.getPermission();
-					Permission permission;
-					if(perm == ObjectPermissions.READ) {
-						permission = Permission.Read;
-					}
-					else if(perm == ObjectPermissions.READ_ACP) {
-						permission = Permission.ReadAcp;
-					}
-					else
-						permission = Permission.WriteAcp;
-
-					accessControlList.grantPermission(awsGrantee, permission);
-				}
-			}
+		if(acl != null && !acl.getGrants().isEmpty()) {
+            accessControlList = client.getObjectAcl(bucketName, key);
+            for(ObjectGrant objGrant:acl.getGrants()) {
+                Grantee grantee = objGrant.getGrantee();
+                com.amazonaws.services.s3.model.Grantee awsGrantee;
+                if(grantee.getGranteeType() == GranteeType.CANONICAL_GRANTEE_TYPE) {
+                    awsGrantee = new CanonicalGrantee(grantee.getIdentifier());
+                }
+                else if(grantee.getGranteeType() == GranteeType.EMAIL_GRANTEE_TYPE) {
+                    awsGrantee = new EmailAddressGrantee(grantee.getIdentifier());
+                }
+                else {
+                    awsGrantee = GroupGrantee.parseGroupGrantee(grantee.getIdentifier());
+                    if(awsGrantee == null) {
+                        logger.warn("Group grantee with identifier: \"" + grantee.getIdentifier() + "\" not found. skipping this grant");
+                        continue;
+                    }
+                }
+                ObjectPermissions perm = objGrant.getPermission();
+                Permission permission;
+                if(perm == ObjectPermissions.READ) {
+                    permission = Permission.Read;
+                }
+                else if(perm == ObjectPermissions.READ_ACP) {
+                    permission = Permission.ReadAcp;
+                }
+                else {
+                    permission = Permission.WriteAcp;
+                }
+                accessControlList.grantPermission(awsGrantee, permission);
+            }
 		}
 		return accessControlList;
 	}

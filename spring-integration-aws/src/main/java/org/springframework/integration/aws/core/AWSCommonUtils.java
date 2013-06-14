@@ -28,8 +28,6 @@ import java.security.NoSuchAlgorithmException;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 
 /**
  * The common utility methods for the
@@ -39,9 +37,16 @@ import org.apache.commons.logging.LogFactory;
  * @since 0.5
  *
  */
-public class AWSCommonUtils {
+public final class AWSCommonUtils {
 
-	private static final Log logger = LogFactory.getLog(AWSCommonUtils.class);
+    private static final int BUFFER_SIZE = 32768;
+    private static final int ARRAY_SIZE = 4096;
+    /**
+     *
+     */
+    private AWSCommonUtils() {
+        throw new AssertionError("Cannot instantiate utility class");
+    }
 
 	/**
 	 * Generates the MD5 hash of the file provided
@@ -51,13 +56,15 @@ public class AWSCommonUtils {
 
 		DigestInputStream din = null;
 		final byte[] digestToReturn;
-
 		try {
-			BufferedInputStream bin = new BufferedInputStream(new FileInputStream(file),32768);
+			BufferedInputStream bin = new BufferedInputStream(new FileInputStream(file), BUFFER_SIZE);
 			din = new DigestInputStream(bin, MessageDigest.getInstance("MD5"));
 			//Just to update the digest
-			byte[] dummy = new byte[4096];
-			for (int i = 1; i > 0; i = din.read(dummy));
+			byte[] dummy = new byte[ARRAY_SIZE];
+            int i = 0;
+			while(i > -1){
+                i = din.read(dummy);
+            }
 			digestToReturn = din.getMessageDigest().digest();
 		}
 		catch (NoSuchAlgorithmException e) {
